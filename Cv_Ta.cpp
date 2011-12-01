@@ -29,20 +29,26 @@ namespace {
 			HTML_HELP_DEF( "type", "BooleanProperty" ) \
 			HTML_HELP_DEF( "default", "mask" ) \
 			HTML_HELP_BODY() \
-			"This parameter defines the contour to use as a starting point." \
+			"The boolean property that defines the initial selection." \
 			HTML_HELP_CLOSE(),
 
 		HTML_HELP_OPEN() \
 			HTML_HELP_DEF( "type", "Unsigned int" ) \
 			HTML_HELP_DEF( "default", "1000" ) \
 			HTML_HELP_BODY() \
-			"This parameter defines the number of iterations the algorithm should do." \
+			"Defines the number of iterations the algorithm should do." \
 			HTML_HELP_CLOSE(),
 		HTML_HELP_OPEN() \
 			HTML_HELP_DEF( "type", "Double" ) \
 			HTML_HELP_DEF( "default", "4.0" ) \
 			HTML_HELP_BODY() \
-			"This parameter is the lambda from the original formula." \
+			"Lambda parameter from the original formula." \
+			HTML_HELP_CLOSE(),
+
+		HTML_HELP_OPEN() \
+			HTML_HELP_DEF( "type", "DoubleProperty" ) \
+			HTML_HELP_BODY() \
+			"Specify which property holds the data associated to each pixels/nodes." \
 			HTML_HELP_CLOSE(),
 	};
 }
@@ -50,60 +56,42 @@ namespace {
 //======================================================
 Cv_Ta::Cv_Ta(const tlp::AlgorithmContext &context):Algorithm(context) {
 	addDependency<Algorithm>("Export image 3D mask", "1.0");
+	addParameter<DoubleProperty>("Data", paramHelp[3]);
 	addParameter<BooleanProperty>("Mask", paramHelp[0]);
 	addParameter<unsigned int>("Number of iterations", paramHelp[1], "1000");
 	addParameter<double>("Lambda", paramHelp[2], "4.0");
 }
 
 //======================================================
-Cv_Ta::~Cv_Ta() {
-}
-
-//======================================================
-bool Cv_Ta::check(std::string &erreurMsg) {
-	return true;
-}
-
-//======================================================
 bool Cv_Ta::run() {
-	unsigned int iter_max = 1000;
-	double lambda = 4.0;
-	DoubleProperty* f0 = graph->getLocalProperty<DoubleProperty>("f0");
-	DoubleProperty* fn = graph->getLocalProperty<DoubleProperty>("fn");
-	DoubleProperty* fnp1 = graph->getLocalProperty<DoubleProperty>("fnp1");
-	std::pair<double, double> c;
-
-	/* Initialisation */
-	if(pluginProgress)
-		pluginProgress->showPreview(true);
+	this->iter_max = 1000;
+	this->lambda = 4.0;
+	this->fn = graph->getLocalProperty<DoubleProperty>("fn");
+	this->fnp1 = graph->getLocalProperty<DoubleProperty>("fnp1");
 
 	BooleanProperty *mask = NULL;
 
 	if (dataSet != 0) {
+		dataSet->get<DoubleProperty*>("Data", this->f0);
 		dataSet->get<BooleanProperty*>("Mask", mask);
 		dataSet->get("Number of iterations", iter_max);
 		dataSet->get("Lambda", lambda);
 	}
 
 	{
-		ColorProperty* color = graph->getLocalProperty<ColorProperty>("viewColor");
 		Iterator<node> *itNodes = graph->getNodes();
 		node n;
-		double value;
 		while(itNodes->hasNext()) {
 			n = itNodes->next();
-			value = color->getNodeValue(n).getR() / 255.0;
-			f0->setNodeValue(n, value);
 			fn->setNodeValue(n, !mask->getNodeValue(n) ? 1 : 0);
 		}
 		delete itNodes;
 
-		computeMeanValues(&c);
+		computeMeanValues();
 	}
 
 	{
-		DoubleProperty* beta = graph->getLocalProperty<DoubleProperty>("beta");
-		DoubleProperty* tmp;
+		DoubleProperty *tmp;
 		Iterator<node> *itNodesU;
 		Iterator<edge> *itEdges;
 		node u, v;
@@ -114,7 +102,7 @@ bool Cv_Ta::run() {
 		if(pluginProgress)
 			pluginProgress->setComment("Processing");
 
-
+		beta = graph->getLocalProperty<DoubleProperty>("beta");
 		for(unsigned int i = 0; i < iter_max && continueProcess; ++i) {
 			itEdges = graph->getEdges();
 			while(itEdges->hasNext()) {
@@ -123,7 +111,7 @@ bool Cv_Ta::run() {
 			}
 			delete itEdges;
 
-			computeMeanValues(&c);
+			computeMeanValues();
 
 			itNodesU = graph->getNodes();
 			while(itNodesU->hasNext()) {
@@ -142,8 +130,8 @@ bool Cv_Ta::run() {
 				delete itEdges;
 
 				u0 = f0->getNodeValue(u);
-				v2 = c.first - u0;
-				v1 = c.second - u0;
+				v2 = in_out_means.first - u0;
+				v1 = in_out_means.second - u0;
 
 				fnp1->setNodeValue(u,
 						max(
@@ -183,7 +171,6 @@ bool Cv_Ta::run() {
 	fnToSelection();
 	exportSelection(iter_max);
 
-	graph->delLocalProperty("f0");
 	graph->delLocalProperty("fn");
 	graph->delLocalProperty("fnp1");
 	graph->delLocalProperty("beta");
@@ -229,33 +216,27 @@ void Cv_Ta::exportSelection(const int i) {
 	}
 }
 
-void Cv_Ta::computeMeanValues(std::pair<double, double>* c)
+void Cv_Ta::computeMeanValues()
 {
 	double c1 = 0, c2 = 0;
 	int n1 = 0, n2 = 0;
 	node n;
 
-	DoubleProperty* f0 = graph->getLocalProperty<DoubleProperty>("f0");
-	DoubleProperty* fn = graph->getLocalProperty<DoubleProperty>("fn");
-
 	Iterator<node> *itNodes = graph->getNodes();
 	while(itNodes->hasNext()) {
 		n = itNodes->next();
-		if(fn->getNodeValue(n) <= 0.5) {
-			c1 += f0->getNodeValue(n);
+		if(this->fn->getNodeValue(n) <= 0.5) {
+			c1 += this->f0->getNodeValue(n);
 			++n1;
 		} else {
-			c2 += f0->getNodeValue(n);
+			c2 += this->f0->getNodeValue(n);
 			++n2;
 		}
 	}
 	delete itNodes;
 
-//	std::cout << "c1: " << c1 << "(" << n1 << ")" << std::endl;
-//	std::cout << "c2: " << c2 << "(" << n2 << ")" << std::endl;
-
-	c->first = c1 / (n1 + 1);
-	c->second = c2 / (n2 + 1);
+	this->in_out_means.first = c1 / (n1 + 1);
+	this->in_out_means.second = c2 / (n2 + 1);
 }
 
 
