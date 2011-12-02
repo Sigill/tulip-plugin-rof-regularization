@@ -41,7 +41,7 @@ namespace {
 
 		HTML_HELP_OPEN() \
 			HTML_HELP_DEF( "type", "Double" ) \
-			HTML_HELP_DEF( "default", "4.0" ) \
+			HTML_HELP_DEF( "default", "0.25" ) \
 			HTML_HELP_BODY() \
 			"Lambda parameter from the original formula." \
 			HTML_HELP_CLOSE(),
@@ -52,22 +52,30 @@ namespace {
 			HTML_HELP_BODY() \
 			"Specify which property holds the data associated to each pixels/nodes." \
 			HTML_HELP_CLOSE(),
+
+		HTML_HELP_OPEN() \
+			HTML_HELP_DEF( "type", "DoubleProperty" ) \
+			HTML_HELP_DEF( "default", "weight" ) \
+			HTML_HELP_BODY() \
+			"Specify which property holds the weight associated to each edge." \
+			HTML_HELP_CLOSE(),
 	};
 }
 
 //======================================================
-Cv_Ta::Cv_Ta(const tlp::AlgorithmContext &context):Algorithm(context), fn(NULL), fnp1(NULL), beta(NULL), f0(NULL) {
+Cv_Ta::Cv_Ta(const tlp::AlgorithmContext &context):Algorithm(context), fn(NULL), fnp1(NULL), beta(NULL), w(NULL), f0(NULL) {
 	addDependency<Algorithm>("Export image 3D mask", "1.0");
+	addParameter<DoubleVectorProperty>("Data", paramHelp[3]);
 	addParameter<BooleanProperty>("Mask", paramHelp[0]);
 	addParameter<unsigned int>("Number of iterations", paramHelp[1], "1000");
-	addParameter<double>("Lambda", paramHelp[2], "4.0");
-	addParameter<DoubleVectorProperty>("Data", paramHelp[3]);
+	addParameter<double>("Lambda", paramHelp[2], "0.25");
+	addParameter<DoubleProperty>("Weight", paramHelp[4]);
 }
 
 //======================================================
 bool Cv_Ta::run() {
 	this->iter_max = 1000;
-	this->lambda = 4.0;
+	this->lambda = 0.25;
 	this->fn = graph->getLocalProperty<DoubleProperty>("fn");
 	this->fnp1 = graph->getLocalProperty<DoubleProperty>("fnp1");
 
@@ -78,6 +86,7 @@ bool Cv_Ta::run() {
 		dataSet->get("Mask", mask);
 		dataSet->get("Number of iterations", iter_max);
 		dataSet->get("Lambda", lambda);
+		dataSet->get("Weight", this->w);
 	}
 
 	{
@@ -121,7 +130,7 @@ bool Cv_Ta::run() {
 			itEdges = graph->getEdges();
 			while(itEdges->hasNext()) {
 				e = itEdges->next();
-				beta->setEdgeValue(e, 1/(fabs(fn->getNodeValue(graph->source(e)) - fn->getNodeValue(graph->target(e))) + 1));
+				beta->setEdgeValue(e, this->w->getEdgeValue(e) / (fabs(fn->getNodeValue(graph->source(e)) - fn->getNodeValue(graph->target(e))) + 1));
 			}
 			delete itEdges;
 
