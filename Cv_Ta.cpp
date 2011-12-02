@@ -38,6 +38,7 @@ namespace {
 			HTML_HELP_BODY() \
 			"Defines the number of iterations the algorithm should do." \
 			HTML_HELP_CLOSE(),
+
 		HTML_HELP_OPEN() \
 			HTML_HELP_DEF( "type", "Double" ) \
 			HTML_HELP_DEF( "default", "4.0" ) \
@@ -46,7 +47,8 @@ namespace {
 			HTML_HELP_CLOSE(),
 
 		HTML_HELP_OPEN() \
-			HTML_HELP_DEF( "type", "DoubleProperty" ) \
+			HTML_HELP_DEF( "type", "DoubleVectorProperty" ) \
+			HTML_HELP_DEF( "default", "data" ) \
 			HTML_HELP_BODY() \
 			"Specify which property holds the data associated to each pixels/nodes." \
 			HTML_HELP_CLOSE(),
@@ -54,12 +56,12 @@ namespace {
 }
 
 //======================================================
-Cv_Ta::Cv_Ta(const tlp::AlgorithmContext &context):Algorithm(context) {
+Cv_Ta::Cv_Ta(const tlp::AlgorithmContext &context):Algorithm(context), fn(NULL), fnp1(NULL), beta(NULL), f0(NULL) {
 	addDependency<Algorithm>("Export image 3D mask", "1.0");
-	addParameter<DoubleProperty>("Data", paramHelp[3]);
 	addParameter<BooleanProperty>("Mask", paramHelp[0]);
 	addParameter<unsigned int>("Number of iterations", paramHelp[1], "1000");
 	addParameter<double>("Lambda", paramHelp[2], "4.0");
+	addParameter<DoubleVectorProperty>("Data", paramHelp[3]);
 }
 
 //======================================================
@@ -72,8 +74,8 @@ bool Cv_Ta::run() {
 	BooleanProperty *mask = NULL;
 
 	if (dataSet != 0) {
-		dataSet->get<DoubleProperty*>("Data", this->f0);
-		dataSet->get<BooleanProperty*>("Mask", mask);
+		dataSet->get("Data", this->f0);
+		dataSet->get("Mask", mask);
 		dataSet->get("Number of iterations", iter_max);
 		dataSet->get("Lambda", lambda);
 	}
@@ -81,9 +83,20 @@ bool Cv_Ta::run() {
 	{
 		Iterator<node> *itNodes = graph->getNodes();
 		node n;
+
+		if(itNodes->hasNext()) {
+			n = itNodes->next();
+			this->f0_size = this->f0->getNodeValue(n).size();
+		}
+		delete itNodes;
+
+		this->in_out_means.first = std::vector< double >(this->f0_size, 0.0);
+		this->in_out_means.second = std::vector< double >(this->f0_size, 0.0);
+
+		itNodes = graph->getNodes();
 		while(itNodes->hasNext()) {
 			n = itNodes->next();
-			fn->setNodeValue(n, !mask->getNodeValue(n) ? 1 : 0);
+			this->fn->setNodeValue(n, !mask->getNodeValue(n) ? 1 : 0);
 		}
 		delete itNodes;
 
@@ -96,7 +109,8 @@ bool Cv_Ta::run() {
 		Iterator<edge> *itEdges;
 		node u, v;
 		edge e;
-		double num, denum, b, v1, v2, u0;
+		double num, denum, b, cv_criteria, cv_criteria_cumulated;
+		std::vector< double > u0;
 		bool continueProcess = true;
 
 		if(pluginProgress)
@@ -130,13 +144,18 @@ bool Cv_Ta::run() {
 				delete itEdges;
 
 				u0 = f0->getNodeValue(u);
-				v2 = in_out_means.first - u0;
-				v1 = in_out_means.second - u0;
+				cv_criteria_cumulated = 0;
+				for(unsigned int j = 0; j < f0_size; ++j) {
+					cv_criteria = in_out_means.first[j] - u0[j];
+					cv_criteria_cumulated -= cv_criteria * cv_criteria;
+					cv_criteria = in_out_means.second[j] - u0[j];
+					cv_criteria_cumulated += cv_criteria * cv_criteria;
+				}
 
 				fnp1->setNodeValue(u,
 						max(
 							min(
-								(num - lambda * (v1 * v1 - v2 * v2)) / denum,
+								(num - lambda * cv_criteria_cumulated) / denum,
 								1
 								),
 							0
@@ -218,25 +237,35 @@ void Cv_Ta::exportSelection(const int i) {
 
 void Cv_Ta::computeMeanValues()
 {
-	double c1 = 0, c2 = 0;
+	this->in_out_means.first = std::vector< double >(this->f0_size, 0.0);
+	this->in_out_means.second = std::vector< double >(this->f0_size, 0.0);
 	int n1 = 0, n2 = 0;
 	node n;
+	unsigned int i;
+	std::vector< double > f0_value;
 
 	Iterator<node> *itNodes = graph->getNodes();
 	while(itNodes->hasNext()) {
 		n = itNodes->next();
+		f0_value = this->f0->getNodeValue(n);
 		if(this->fn->getNodeValue(n) <= 0.5) {
-			c1 += this->f0->getNodeValue(n);
+			for(i = 0; i < f0_size; ++i) {
+				this->in_out_means.first[i] += f0_value[i];
+			}
 			++n1;
 		} else {
-			c2 += this->f0->getNodeValue(n);
+			for(i = 0; i < f0_size; ++i) {
+				this->in_out_means.second[i] += f0_value[i];
+			}
 			++n2;
 		}
 	}
 	delete itNodes;
 
-	this->in_out_means.first = c1 / (n1 + 1);
-	this->in_out_means.second = c2 / (n2 + 1);
+	for(i = 0; i < f0_size; ++i) {
+		this->in_out_means.first[i] /= n1 + 1;
+		this->in_out_means.second[i] /= n2 + 1;
+	}
 }
 
 

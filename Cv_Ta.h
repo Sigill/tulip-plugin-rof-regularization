@@ -8,8 +8,10 @@ class Cv_Ta:public tlp::Algorithm {
 private:
 	unsigned int iter_max;
 	double lambda;
-	tlp::DoubleProperty *f0, *fn, *fnp1, *beta;
-	std::pair< double, double > in_out_means;
+	tlp::DoubleProperty *fn, *fnp1, *beta;
+	tlp::DoubleVectorProperty *f0;
+	std::pair< std::vector< double >, std::vector< double > > in_out_means;
+	unsigned int f0_size;
 
 public:
   Cv_Ta(const tlp::AlgorithmContext& context);
