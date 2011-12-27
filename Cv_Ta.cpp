@@ -105,7 +105,7 @@ bool Cv_Ta::run() {
 		itNodes = graph->getNodes();
 		while(itNodes->hasNext()) {
 			n = itNodes->next();
-			this->fn->setNodeValue(n, !mask->getNodeValue(n) ? 1 : 0);
+			this->fn->setNodeValue(n, mask->getNodeValue(n) ? 1 : 0);
 		}
 		delete itNodes;
 
@@ -156,9 +156,9 @@ bool Cv_Ta::run() {
 				cv_criteria_cumulated = 0;
 				for(unsigned int j = 0; j < f0_size; ++j) {
 					cv_criteria = in_out_means.first[j] - u0[j];
-					cv_criteria_cumulated -= cv_criteria * cv_criteria;
-					cv_criteria = in_out_means.second[j] - u0[j];
 					cv_criteria_cumulated += cv_criteria * cv_criteria;
+					cv_criteria = in_out_means.second[j] - u0[j];
+					cv_criteria_cumulated -= cv_criteria * cv_criteria;
 				}
 
 				fnp1->setNodeValue(u,
@@ -222,7 +222,7 @@ void Cv_Ta::fnToSelection()
 	itNodesU = graph->getNodes();
 	while(itNodesU->hasNext()) {
 		u = itNodesU->next();
-		if(fn->getNodeValue(u) < threshold) {
+		if(fn->getNodeValue(u) > threshold) {
 			selection->setNodeValue(u, 1);
 		} else {
 			selection->setNodeValue(u, 0);
@@ -257,7 +257,7 @@ void Cv_Ta::computeMeanValues()
 	while(itNodes->hasNext()) {
 		n = itNodes->next();
 		f0_value = this->f0->getNodeValue(n);
-		if(this->fn->getNodeValue(n) <= 0.5) {
+		if(this->fn->getNodeValue(n) >= 0.5) {
 			for(i = 0; i < f0_size; ++i) {
 				this->in_out_means.first[i] += f0_value[i];
 			}
