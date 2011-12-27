@@ -59,17 +59,25 @@ namespace {
 			HTML_HELP_BODY() \
 			"Specify which property holds the weight associated to each edge." \
 			HTML_HELP_CLOSE(),
+
+		HTML_HELP_OPEN() \
+			HTML_HELP_DEF( "type", "BooleanProperty" ) \
+			HTML_HELP_DEF( "default", "roi" ) \
+			HTML_HELP_BODY() \
+			"The boolean property that defines the region of interest." \
+			HTML_HELP_CLOSE(),
 	};
 }
 
 //======================================================
-Cv_Ta::Cv_Ta(const tlp::AlgorithmContext &context):Algorithm(context), fn(NULL), fnp1(NULL), beta(NULL), w(NULL), f0(NULL) {
+Cv_Ta::Cv_Ta(const tlp::AlgorithmContext &context):Algorithm(context), fn(NULL), fnp1(NULL), beta(NULL), w(NULL), f0(NULL), roi(NULL) {
 	addDependency<Algorithm>("Export image 3D mask", "1.0");
 	addParameter<DoubleVectorProperty>("Data", paramHelp[3]);
 	addParameter<BooleanProperty>("Mask", paramHelp[0]);
 	addParameter<unsigned int>("Number of iterations", paramHelp[1], "1000");
 	addParameter<double>("Lambda", paramHelp[2], "0.25");
 	addParameter<DoubleProperty>("Weight", paramHelp[4]);
+	addParameter<BooleanProperty>("Roi", paramHelp[5]);
 }
 
 //======================================================
@@ -78,6 +86,7 @@ bool Cv_Ta::run() {
 	this->lambda = 0.25;
 	this->fn = graph->getLocalProperty<DoubleProperty>("fn");
 	this->fnp1 = graph->getLocalProperty<DoubleProperty>("fnp1");
+	this->fn->setAllNodeValue(0.0);
 
 	BooleanProperty *mask = NULL;
 
@@ -87,6 +96,7 @@ bool Cv_Ta::run() {
 		dataSet->get("Number of iterations", iter_max);
 		dataSet->get("Lambda", lambda);
 		dataSet->get("Weight", this->w);
+		dataSet->get("Roi", this->roi);
 	}
 
 	{
@@ -105,7 +115,8 @@ bool Cv_Ta::run() {
 		itNodes = graph->getNodes();
 		while(itNodes->hasNext()) {
 			n = itNodes->next();
-			this->fn->setNodeValue(n, mask->getNodeValue(n) ? 1 : 0);
+			if(this->roi->getNodeValue(n))
+				this->fn->setNodeValue(n, mask->getNodeValue(n) ? 1.0 : 0.0);
 		}
 		delete itNodes;
 
@@ -130,7 +141,10 @@ bool Cv_Ta::run() {
 			itEdges = graph->getEdges();
 			while(itEdges->hasNext()) {
 				e = itEdges->next();
-				beta->setEdgeValue(e, this->w->getEdgeValue(e) / (fabs(fn->getNodeValue(graph->source(e)) - fn->getNodeValue(graph->target(e))) + 1));
+				u = graph->source(e);
+				v = graph->target(e);
+				if(this->roi->getNodeValue(u) && this->roi->getNodeValue(v))
+					beta->setEdgeValue(e, this->w->getEdgeValue(e) / (fabs(fn->getNodeValue(u) - fn->getNodeValue(v)) + 1));
 			}
 			delete itEdges;
 
@@ -139,6 +153,10 @@ bool Cv_Ta::run() {
 			itNodesU = graph->getNodes();
 			while(itNodesU->hasNext()) {
 				u = itNodesU->next();
+
+				if(!this->roi->getNodeValue(u))
+					continue;
+
 				itEdges = graph->getInOutEdges(u);
 				num = 0; denum = 0;
 				while(itEdges->hasNext()) {
@@ -147,8 +165,10 @@ bool Cv_Ta::run() {
 
 					v = graph->opposite(e, u);
 
-					num += b * fn->getNodeValue(v);
-					denum += b;
+					if(this->roi->getNodeValue(v)) {
+						num += b * fn->getNodeValue(v);
+						denum += b;
+					}
 				}
 				delete itEdges;
 
@@ -256,6 +276,10 @@ void Cv_Ta::computeMeanValues()
 	Iterator<node> *itNodes = graph->getNodes();
 	while(itNodes->hasNext()) {
 		n = itNodes->next();
+		
+		if(!this->roi->getNodeValue(n))
+			continue;
+
 		f0_value = this->f0->getNodeValue(n);
 		if(this->fn->getNodeValue(n) >= 0.5) {
 			for(i = 0; i < f0_size; ++i) {

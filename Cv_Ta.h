@@ -10,6 +10,7 @@ private:
 	double lambda;
 	tlp::DoubleProperty *fn, *fnp1, *beta, *w;
 	tlp::DoubleVectorProperty *f0;
+	tlp::BooleanProperty *roi;
 	std::pair< std::vector< double >, std::vector< double > > in_out_means;
 	unsigned int f0_size;
 
