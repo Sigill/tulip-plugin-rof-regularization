@@ -184,7 +184,7 @@ bool Cv_Ta::run() {
 				fnp1->setNodeValue(u,
 						max(
 							min(
-								(num - lambda * cv_criteria_cumulated) / denum,
+								(num - lambda * cv_criteria_cumulated / f0_size) / denum,
 								1
 								),
 							0
