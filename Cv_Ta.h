@@ -7,7 +7,7 @@
 class Cv_Ta:public tlp::Algorithm {
 private:
 	unsigned int iter_max;
-	double lambda;
+	double lambda1, lambda2;
 	tlp::DoubleProperty *fn, *fnp1, *beta, *w;
 	tlp::DoubleVectorProperty *f0;
 	tlp::BooleanProperty *roi;

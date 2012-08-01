@@ -43,7 +43,7 @@ namespace {
 			HTML_HELP_DEF( "type", "Double" ) \
 			HTML_HELP_DEF( "default", "0.25" ) \
 			HTML_HELP_BODY() \
-			"Lambda parameter from the original formula." \
+			"Lambda 1 parameter from the original formula." \
 			HTML_HELP_CLOSE(),
 
 		HTML_HELP_OPEN() \
@@ -66,6 +66,13 @@ namespace {
 			HTML_HELP_BODY() \
 			"The boolean property that defines the region of interest." \
 			HTML_HELP_CLOSE(),
+
+		HTML_HELP_OPEN() \
+			HTML_HELP_DEF( "type", "Double" ) \
+			HTML_HELP_DEF( "default", "0.25" ) \
+			HTML_HELP_BODY() \
+			"Lambda 2 parameter from the original formula." \
+			HTML_HELP_CLOSE(),
 	};
 }
 
@@ -75,7 +82,8 @@ Cv_Ta::Cv_Ta(const tlp::AlgorithmContext &context):Algorithm(context), fn(NULL),
 	addParameter<DoubleVectorProperty>("Data", paramHelp[3]);
 	addParameter<BooleanProperty>("Mask", paramHelp[0]);
 	addParameter<unsigned int>("Number of iterations", paramHelp[1], "1000");
-	addParameter<double>("Lambda", paramHelp[2], "0.25");
+	addParameter<double>("Lambda1", paramHelp[2], "0.25");
+	addParameter<double>("Lambda2", paramHelp[6], "0.25");
 	addParameter<DoubleProperty>("Weight", paramHelp[4]);
 	addParameter<BooleanProperty>("Roi", paramHelp[5]);
 }
@@ -83,7 +91,8 @@ Cv_Ta::Cv_Ta(const tlp::AlgorithmContext &context):Algorithm(context), fn(NULL),
 //======================================================
 bool Cv_Ta::run() {
 	this->iter_max = 1000;
-	this->lambda = 0.25;
+	this->lambda1 = 0.25;
+	this->lambda2 = 0.25;
 	this->fn = graph->getLocalProperty<DoubleProperty>("fn");
 	this->fnp1 = graph->getLocalProperty<DoubleProperty>("fnp1");
 	this->fn->setAllNodeValue(0.0);
@@ -94,7 +103,8 @@ bool Cv_Ta::run() {
 		dataSet->get("Data", this->f0);
 		dataSet->get("Mask", mask);
 		dataSet->get("Number of iterations", iter_max);
-		dataSet->get("Lambda", lambda);
+		dataSet->get("Lambda1", lambda1);
+		dataSet->get("Lambda2", lambda2);
 		dataSet->get("Weight", this->w);
 		dataSet->get("Roi", this->roi);
 	}
@@ -176,15 +186,15 @@ bool Cv_Ta::run() {
 				cv_criteria_cumulated = 0;
 				for(unsigned int j = 0; j < f0_size; ++j) {
 					cv_criteria = in_out_means.first[j] - u0[j];
-					cv_criteria_cumulated += cv_criteria * cv_criteria;
+					cv_criteria_cumulated += lambda1 * cv_criteria * cv_criteria;
 					cv_criteria = in_out_means.second[j] - u0[j];
-					cv_criteria_cumulated -= cv_criteria * cv_criteria;
+					cv_criteria_cumulated -= lambda2 * cv_criteria * cv_criteria;
 				}
 
 				fnp1->setNodeValue(u,
 						max(
 							min(
-								(num - lambda * cv_criteria_cumulated / f0_size) / denum,
+								(num - cv_criteria_cumulated / f0_size) / denum,
 								1
 								),
 							0
@@ -202,7 +212,8 @@ bool Cv_Ta::run() {
 					continueProcess = false;
 
 				pluginProgress->progress(i, iter_max);
-				if(/*pluginProgress->isPreviewMode() &&*/ (i % 20 == 0)) {
+				if(/*pluginProgress->isPreviewMode() &&*/ (i % 50 == 0)) {
+					std::cerr << "Iteration " << i << std::endl;
 					fnToSelection();
 					exportSelection(i);
 					//std::cout << "Threshold: " << (fn->getNodeMax(graph) / 2.0) << std::endl;
@@ -235,7 +246,7 @@ void Cv_Ta::fnToSelection()
 	node u;
 	BooleanProperty *selection = graph->getLocalProperty<BooleanProperty>("viewSelection");
 	DoubleProperty *fn = graph->getLocalProperty<DoubleProperty>("fn");
-	double threshold = fn->getNodeMax(graph) / 2.0;
+	double threshold = (fn->getNodeMax(graph)-fn->getNodeMin(graph)) / 2.0;
 
 	std::cout << "Threshold: " << threshold << std::endl;
 
