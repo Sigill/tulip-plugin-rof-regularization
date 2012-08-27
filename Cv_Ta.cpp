@@ -1,8 +1,12 @@
 #include "Cv_Ta.h"
 #include <sstream>
 #include <iostream>
+#include <iomanip>
 
-ALGORITHMPLUGIN(Cv_Ta, "Cv_Ta", "Cyrille FAUCHEUX","20/11/2011","Alpha","1.0");
+#include <QFileInfo>
+#include <QDir>
+
+ALGORITHMPLUGIN(Cv_Ta, "Cv_Ta", "Cyrille FAUCHEUX","20/11/2011","Alpha","1.1");
 
 using namespace std;
 using namespace tlp;
@@ -15,7 +19,7 @@ inline double min(double v1, double v2) {
 	return (v1 > v2 ? v2 : v1);
 }
 
-	template <class T>
+template <class T>
 std::string to_string(T t, std::ios_base & (*f)(std::ios_base&))
 {
 	std::ostringstream oss;
@@ -73,11 +77,25 @@ namespace {
 			HTML_HELP_BODY() \
 			"Lambda 2 parameter from the original formula." \
 			HTML_HELP_CLOSE(),
+
+		HTML_HELP_OPEN() \
+			HTML_HELP_DEF( "type", "Unsigned int" ) \
+			HTML_HELP_DEF( "default", "50" ) \
+			HTML_HELP_BODY() \
+			"Specify at which interval the processed image must be exported. (0 to disable intermediate export)" \
+			HTML_HELP_CLOSE(),
+
+		HTML_HELP_OPEN() \
+			HTML_HELP_DEF( "type", "Directory pathname" ) \
+			HTML_HELP_DEF( "default", "/tmp" ) \
+			HTML_HELP_BODY() \
+			"This parameter is used to specify where the processed images must be exported." \
+			HTML_HELP_CLOSE(),
 	};
 }
 
 //======================================================
-Cv_Ta::Cv_Ta(const tlp::AlgorithmContext &context):Algorithm(context), fn(NULL), fnp1(NULL), beta(NULL), w(NULL), f0(NULL), roi(NULL) {
+Cv_Ta::Cv_Ta(const tlp::AlgorithmContext &context):Algorithm(context), fn(NULL), fnp1(NULL), beta(NULL), w(NULL), f0(NULL), mask(NULL), roi(NULL) {
 	addDependency<Algorithm>("Export image 3D mask", "1.0");
 	addParameter<DoubleVectorProperty>("Data", paramHelp[3]);
 	addParameter<BooleanProperty>("Mask", paramHelp[0]);
@@ -86,30 +104,92 @@ Cv_Ta::Cv_Ta(const tlp::AlgorithmContext &context):Algorithm(context), fn(NULL),
 	addParameter<double>("Lambda2", paramHelp[6], "0.25");
 	addParameter<DoubleProperty>("Weight", paramHelp[4]);
 	addParameter<BooleanProperty>("Roi", paramHelp[5]);
+	addParameter<unsigned int>("Export interval", paramHelp[7], "50");
+  addParameter<string>("dir::Export directory", paramHelp[8]);
+}
+
+template<typename T>
+void PrintVector(const std::vector<T>& t){
+  for(typename std::vector<T>::size_type i=0; i<t.size(); ++i){
+    std::cout << t[i] << " - ";
+  }
+  std::cout << std::endl << std::endl;
+}
+
+#define CHECK_PROP_PROVIDED(PROP, STOR) \
+  if(!dataSet->get(#PROP, STOR)) \
+    throw std::runtime_error(std::string("No \"") + #PROP + "\" provided")
+
+bool Cv_Ta::check(std::string &err)
+{
+  try {
+    if(dataSet == NULL)
+      throw std::runtime_error("No dataset provided.");
+
+    CHECK_PROP_PROVIDED(Data, this->f0);
+
+    CHECK_PROP_PROVIDED(Mask, this->mask);
+
+    CHECK_PROP_PROVIDED(Number of iterations, this->iter_max);
+
+    CHECK_PROP_PROVIDED(Lambda1, this->lambda1);
+
+    CHECK_PROP_PROVIDED(Lambda2, this->lambda2);
+
+    CHECK_PROP_PROVIDED(Weight, this->w);
+
+    CHECK_PROP_PROVIDED(Roi, this->roi);
+
+    CHECK_PROP_PROVIDED(Export interval, this->export_interval);
+
+    CHECK_PROP_PROVIDED(dir::Export directory, this->export_directory);
+
+    if(this->iter_max <= 0) {
+      std::ostringstream err;
+      err << "Invalid number of iterations: " << this->iter_max;
+      throw std::runtime_error(err.str());
+    }
+
+    { // Checking if we can write in the export directory
+      QString qstring_export_directory = QString::fromStdString(this->export_directory);
+      QFileInfo info_export_directory(qstring_export_directory);
+      QDir qdir_export_directory(qstring_export_directory);
+
+      if(info_export_directory.exists()) {
+        if(info_export_directory.isDir()) {
+          if(qdir_export_directory.entryInfoList(QDir::NoDotAndDotDot | QDir::AllEntries).count() != 0) {
+            throw std::runtime_error("Export directory (" + qdir_export_directory.absolutePath().toStdString() + ") is not empty.");
+          }
+        } else {
+          throw std::runtime_error("Export directory (" + qdir_export_directory.absolutePath().toStdString() + ") already exists but is not a directory.");
+        }
+      } else {
+        if(!qdir_export_directory.mkpath(".")) {
+          throw std::runtime_error("Export directory (" + qdir_export_directory.absolutePath().toStdString() + ") cannot be created.");
+        }
+      }
+    }
+
+    std::cout << "Number of iterations: " << this->iter_max << std::endl;
+    std::cout << "Lambda1: " << this->lambda1 << std::endl;
+    std::cout << "Lambda2: " << this->lambda2 << std::endl;
+    std::cout << "Export interval: " << this->export_interval << std::endl;
+    std::cout << "Export directory: " << this->export_directory << std::endl;
+  } catch (std::runtime_error &ex) {
+    err.assign(ex.what());
+    return false;
+  }
+
+  return true;
 }
 
 //======================================================
 bool Cv_Ta::run() {
-	this->iter_max = 1000;
-	this->lambda1 = 0.25;
-	this->lambda2 = 0.25;
 	this->fn = graph->getLocalProperty<DoubleProperty>("fn");
 	this->fnp1 = graph->getLocalProperty<DoubleProperty>("fnp1");
 	this->fn->setAllNodeValue(0.0);
 
-	BooleanProperty *mask = NULL;
-
-	if (dataSet != 0) {
-		dataSet->get("Data", this->f0);
-		dataSet->get("Mask", mask);
-		dataSet->get("Number of iterations", iter_max);
-		dataSet->get("Lambda1", lambda1);
-		dataSet->get("Lambda2", lambda2);
-		dataSet->get("Weight", this->w);
-		dataSet->get("Roi", this->roi);
-	}
-
-	{
+	{ // Initializing Fn from the mask
 		Iterator<node> *itNodes = graph->getNodes();
 		node n;
 
@@ -119,6 +199,7 @@ bool Cv_Ta::run() {
 		}
 		delete itNodes;
 
+
 		this->in_out_means.first = std::vector< double >(this->f0_size, 0.0);
 		this->in_out_means.second = std::vector< double >(this->f0_size, 0.0);
 
@@ -126,12 +207,14 @@ bool Cv_Ta::run() {
 		while(itNodes->hasNext()) {
 			n = itNodes->next();
 			if(this->roi->getNodeValue(n))
-				this->fn->setNodeValue(n, mask->getNodeValue(n) ? 1.0 : 0.0);
+				this->fn->setNodeValue(n, this->mask->getNodeValue(n) ? 1.0 : 0.0);
 		}
 		delete itNodes;
 
 		computeMeanValues();
 	}
+
+  std::cout << "Fn initialized" << std::endl;
 
 	{
 		DoubleProperty *tmp;
@@ -147,7 +230,7 @@ bool Cv_Ta::run() {
 			pluginProgress->setComment("Processing");
 
 		beta = graph->getLocalProperty<DoubleProperty>("beta");
-		for(unsigned int i = 0; i < iter_max && continueProcess; ++i) {
+		for(unsigned int i = 0; i < iter_max; ++i) {
 			itEdges = graph->getEdges();
 			while(itEdges->hasNext()) {
 				e = itEdges->next();
@@ -211,14 +294,22 @@ bool Cv_Ta::run() {
 				if(pluginProgress->state() != TLP_CONTINUE)
 					continueProcess = false;
 
-				pluginProgress->progress(i, iter_max);
-				if(/*pluginProgress->isPreviewMode() &&*/ (i % 50 == 0)) {
-					std::cerr << "Iteration " << i << std::endl;
+        if(i % 10 == 0)
+          pluginProgress->progress(i, iter_max);
+
+				if(/*pluginProgress->isPreviewMode() &&*/ ((i+1) % this->export_interval == 0)) {
+					std::cerr << "Iteration " << (i+1) << std::endl;
 					fnToSelection();
-					exportSelection(i);
-					//std::cout << "Threshold: " << (fn->getNodeMax(graph) / 2.0) << std::endl;
+          try {
+  					exportSelection(i+1);
+          } catch (export_exception &ex) {
+            std::cerr << "Export failed: " << ex.what() << std::endl;
+          }
 				}
 			}
+
+      if(!continueProcess)
+        break;
 		}
 	}
 
@@ -228,7 +319,11 @@ bool Cv_Ta::run() {
 	}
 
 	fnToSelection();
-	exportSelection(iter_max);
+  try {
+    exportSelection(iter_max);
+  } catch (export_exception &ex) {
+    std::cerr << "Export failed: " << ex.what() << std::endl;
+  }
 
 	graph->delLocalProperty("fn");
 	graph->delLocalProperty("fnp1");
@@ -263,16 +358,26 @@ void Cv_Ta::fnToSelection()
 }
 
 void Cv_Ta::exportSelection(const int i) {
+  std::ostringstream directory_name;
+  directory_name << std::setfill('0') << std::setw(6) << i;
+
+  std::string directory = this->export_directory + "/" + directory_name.str();
+  
+  QDir qdir_directory(directory.c_str());
+
+  if(!qdir_directory.mkpath(".")) {
+    throw export_exception("The directory " + QDir::toNativeSeparators(QString(directory.c_str())).toStdString() + " cannot be created");
+  }
+
 	BooleanProperty *selection = graph->getLocalProperty<BooleanProperty>("viewSelection");
-	string message;
 	dataSet->set<PropertyInterface*>("Mask property", selection);
-	dataSet->set<string>("dir::Output folder", "/tmp");
-	dataSet->set<string>("Pattern", to_string<int>(i, std::dec) + "_%1.bmp");
-	if(!applyAlgorithm(graph, message, dataSet, "Export image 3D mask", pluginProgress))
-	{
-		std::cerr << "Error: Unable to load the mask" << std::endl;
-		if(pluginProgress) pluginProgress->setError("Error: Unable to load the mask");
-	}
+	dataSet->set<string>("dir::Output folder", directory);
+	dataSet->set<string>("Pattern", "%1.bmp");
+
+	string message;
+
+	if(!graph->applyAlgorithm("Export image 3D mask", message, dataSet, NULL))
+    throw export_exception("Unable to export the image (" + message + ")");
 }
 
 void Cv_Ta::computeMeanValues()
