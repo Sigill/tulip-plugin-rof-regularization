@@ -96,7 +96,6 @@ namespace {
 
 //======================================================
 Cv_Ta::Cv_Ta(const tlp::AlgorithmContext &context):Algorithm(context), fn(NULL), fnp1(NULL), beta(NULL), w(NULL), f0(NULL), mask(NULL), roi(NULL) {
-	addDependency<Algorithm>("Export image 3D mask", "1.0");
 	addParameter<DoubleVectorProperty>("Data", paramHelp[3]);
 	addParameter<BooleanProperty>("Mask", paramHelp[0]);
 	addParameter<unsigned int>("Number of iterations", paramHelp[1], "1000");
@@ -106,14 +105,6 @@ Cv_Ta::Cv_Ta(const tlp::AlgorithmContext &context):Algorithm(context), fn(NULL),
 	addParameter<BooleanProperty>("Roi", paramHelp[5]);
 	addParameter<unsigned int>("Export interval", paramHelp[7], "50");
   addParameter<string>("dir::Export directory", paramHelp[8]);
-}
-
-template<typename T>
-void PrintVector(const std::vector<T>& t){
-  for(typename std::vector<T>::size_type i=0; i<t.size(); ++i){
-    std::cout << t[i] << " - ";
-  }
-  std::cout << std::endl << std::endl;
 }
 
 #define CHECK_PROP_PROVIDED(PROP, STOR) \
@@ -294,12 +285,13 @@ bool Cv_Ta::run() {
 				if(pluginProgress->state() != TLP_CONTINUE)
 					continueProcess = false;
 
-        if(i % 10 == 0)
+        if((i + 1) % 10 == 0) {
           pluginProgress->progress(i, iter_max);
-
-				if(/*pluginProgress->isPreviewMode() &&*/ ((i+1) % this->export_interval == 0)) {
 					std::cerr << "Iteration " << (i+1) << std::endl;
-					fnToSelection();
+        }
+
+				if((this->export_interval > 0) && ((i + 1) % this->export_interval) == 0) {
+					std::cerr << "Iteration " << (i+1) << std::endl;
           try {
   					exportSelection(i+1);
           } catch (export_exception &ex) {
@@ -319,15 +311,17 @@ bool Cv_Ta::run() {
 	}
 
 	fnToSelection();
+
+	graph->delLocalProperty("fn");
+	graph->delLocalProperty("fnp1");
+	graph->delLocalProperty("beta");
+
   try {
     exportSelection(iter_max);
   } catch (export_exception &ex) {
     std::cerr << "Export failed: " << ex.what() << std::endl;
   }
 
-	graph->delLocalProperty("fn");
-	graph->delLocalProperty("fnp1");
-	graph->delLocalProperty("beta");
 
 	std::cout << "FINISHED" << std::endl;
 
@@ -358,39 +352,13 @@ void Cv_Ta::fnToSelection()
 }
 
 void Cv_Ta::exportSelection(const int i) {
-  int depth = -1;
-
-  if(!graph->getAttribute<int>("depth", depth)) {
-    throw export_exception("The graph does not seems to be an image");
-  }
-
   std::ostringstream directory_name;
-  directory_name << std::setfill('0') << std::setw(6) << i;
+  directory_name << this->export_directory << "/" << std::setfill('0') << std::setw(6) << i << ".tlp";
 
-  std::string directory = this->export_directory;
-  std::string pattern = "%1.bmp";
-
-  if(depth == 1) {
-    pattern = directory_name.str() + "_" +  pattern;
-  } else {
-    directory += "/" + directory_name.str();
-
-    QDir qdir_directory(directory.c_str());
-
-    if(!qdir_directory.mkpath(".")) {
-      throw export_exception("The directory " + QDir::toNativeSeparators(QString(directory.c_str())).toStdString() + " cannot be created");
-    }
+  if(!tlp::saveGraph(graph, directory_name.str()))
+  {
+    throw export_exception(directory_name.str() + " cannot be written");
   }
-  
-	BooleanProperty *selection = graph->getLocalProperty<BooleanProperty>("viewSelection");
-	dataSet->set<PropertyInterface*>("Mask property", selection);
-	dataSet->set<string>("dir::Output folder", directory);
-	dataSet->set<string>("Pattern", pattern);
-
-	string message;
-
-	if(!graph->applyAlgorithm("Export image 3D mask", message, dataSet, NULL))
-    throw export_exception("Unable to export the image (" + message + ")");
 }
 
 void Cv_Ta::computeMeanValues()
