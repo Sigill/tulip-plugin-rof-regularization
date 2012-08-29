@@ -358,21 +358,34 @@ void Cv_Ta::fnToSelection()
 }
 
 void Cv_Ta::exportSelection(const int i) {
+  int depth = -1;
+
+  if(!graph->getAttribute<int>("depth", depth)) {
+    throw export_exception("The graph does not seems to be an image");
+  }
+
   std::ostringstream directory_name;
   directory_name << std::setfill('0') << std::setw(6) << i;
 
-  std::string directory = this->export_directory + "/" + directory_name.str();
-  
-  QDir qdir_directory(directory.c_str());
+  std::string directory = this->export_directory;
+  std::string pattern = "%1.bmp";
 
-  if(!qdir_directory.mkpath(".")) {
-    throw export_exception("The directory " + QDir::toNativeSeparators(QString(directory.c_str())).toStdString() + " cannot be created");
+  if(depth == 1) {
+    pattern = directory_name.str() + "_" +  pattern;
+  } else {
+    directory += "/" + directory_name.str();
+
+    QDir qdir_directory(directory.c_str());
+
+    if(!qdir_directory.mkpath(".")) {
+      throw export_exception("The directory " + QDir::toNativeSeparators(QString(directory.c_str())).toStdString() + " cannot be created");
+    }
   }
-
+  
 	BooleanProperty *selection = graph->getLocalProperty<BooleanProperty>("viewSelection");
 	dataSet->set<PropertyInterface*>("Mask property", selection);
 	dataSet->set<string>("dir::Output folder", directory);
-	dataSet->set<string>("Pattern", "%1.bmp");
+	dataSet->set<string>("Pattern", pattern);
 
 	string message;
 
