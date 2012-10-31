@@ -104,74 +104,74 @@ Cv_Ta::Cv_Ta(const tlp::AlgorithmContext &context):Algorithm(context), fn(NULL),
 	addParameter<DoubleProperty>("Weight", paramHelp[4]);
 	addParameter<BooleanProperty>("Roi", paramHelp[5]);
 	addParameter<unsigned int>("Export interval", paramHelp[7], "50");
-  addParameter<string>("dir::Export directory", paramHelp[8]);
+	addParameter<string>("dir::Export directory", paramHelp[8]);
 }
 
 #define CHECK_PROP_PROVIDED(PROP, STOR) \
-  if(!dataSet->get(#PROP, STOR)) \
-    throw std::runtime_error(std::string("No \"") + #PROP + "\" provided")
+	if(!dataSet->get(#PROP, STOR)) \
+		throw std::runtime_error(std::string("No \"") + #PROP + "\" provided")
 
 bool Cv_Ta::check(std::string &err)
 {
-  try {
-    if(dataSet == NULL)
-      throw std::runtime_error("No dataset provided.");
+	try {
+		if(dataSet == NULL)
+			throw std::runtime_error("No dataset provided.");
 
-    CHECK_PROP_PROVIDED(Data, this->f0);
+		CHECK_PROP_PROVIDED(Data, this->f0);
 
-    CHECK_PROP_PROVIDED(Mask, this->mask);
+		CHECK_PROP_PROVIDED(Mask, this->mask);
 
-    CHECK_PROP_PROVIDED(Number of iterations, this->iter_max);
+		CHECK_PROP_PROVIDED(Number of iterations, this->iter_max);
 
-    CHECK_PROP_PROVIDED(Lambda1, this->lambda1);
+		CHECK_PROP_PROVIDED(Lambda1, this->lambda1);
 
-    CHECK_PROP_PROVIDED(Lambda2, this->lambda2);
+		CHECK_PROP_PROVIDED(Lambda2, this->lambda2);
 
-    CHECK_PROP_PROVIDED(Weight, this->w);
+		CHECK_PROP_PROVIDED(Weight, this->w);
 
-    CHECK_PROP_PROVIDED(Roi, this->roi);
+		CHECK_PROP_PROVIDED(Roi, this->roi);
 
-    CHECK_PROP_PROVIDED(Export interval, this->export_interval);
+		CHECK_PROP_PROVIDED(Export interval, this->export_interval);
 
-    CHECK_PROP_PROVIDED(dir::Export directory, this->export_directory);
+		CHECK_PROP_PROVIDED(dir::Export directory, this->export_directory);
 
-    if(this->iter_max <= 0) {
-      std::ostringstream err;
-      err << "Invalid number of iterations: " << this->iter_max;
-      throw std::runtime_error(err.str());
-    }
+		if(this->iter_max <= 0) {
+			std::ostringstream err;
+			err << "Invalid number of iterations: " << this->iter_max;
+			throw std::runtime_error(err.str());
+		}
 
-    { // Checking if we can write in the export directory
-      QString qstring_export_directory = QString::fromStdString(this->export_directory);
-      QFileInfo info_export_directory(qstring_export_directory);
-      QDir qdir_export_directory(qstring_export_directory);
+		{ // Checking if we can write in the export directory
+			QString qstring_export_directory = QString::fromStdString(this->export_directory);
+			QFileInfo info_export_directory(qstring_export_directory);
+			QDir qdir_export_directory(qstring_export_directory);
 
-      if(info_export_directory.exists()) {
-        if(info_export_directory.isDir()) {
-          if(qdir_export_directory.entryInfoList(QDir::NoDotAndDotDot | QDir::AllEntries).count() != 0) {
-            throw std::runtime_error("Export directory (" + qdir_export_directory.absolutePath().toStdString() + ") is not empty.");
-          }
-        } else {
-          throw std::runtime_error("Export directory (" + qdir_export_directory.absolutePath().toStdString() + ") already exists but is not a directory.");
-        }
-      } else {
-        if(!qdir_export_directory.mkpath(".")) {
-          throw std::runtime_error("Export directory (" + qdir_export_directory.absolutePath().toStdString() + ") cannot be created.");
-        }
-      }
-    }
+			if(info_export_directory.exists()) {
+				if(info_export_directory.isDir()) {
+					if(qdir_export_directory.entryInfoList(QDir::NoDotAndDotDot | QDir::AllEntries).count() != 0) {
+						throw std::runtime_error("Export directory (" + qdir_export_directory.absolutePath().toStdString() + ") is not empty.");
+					}
+				} else {
+					throw std::runtime_error("Export directory (" + qdir_export_directory.absolutePath().toStdString() + ") already exists but is not a directory.");
+				}
+			} else {
+				if(!qdir_export_directory.mkpath(".")) {
+					throw std::runtime_error("Export directory (" + qdir_export_directory.absolutePath().toStdString() + ") cannot be created.");
+				}
+			}
+		}
 
-    std::cout << "Number of iterations: " << this->iter_max << std::endl;
-    std::cout << "Lambda1: " << this->lambda1 << std::endl;
-    std::cout << "Lambda2: " << this->lambda2 << std::endl;
-    std::cout << "Export interval: " << this->export_interval << std::endl;
-    std::cout << "Export directory: " << this->export_directory << std::endl;
-  } catch (std::runtime_error &ex) {
-    err.assign(ex.what());
-    return false;
-  }
+		std::cout << "Number of iterations: " << this->iter_max << std::endl;
+		std::cout << "Lambda1: " << this->lambda1 << std::endl;
+		std::cout << "Lambda2: " << this->lambda2 << std::endl;
+		std::cout << "Export interval: " << this->export_interval << std::endl;
+		std::cout << "Export directory: " << this->export_directory << std::endl;
+	} catch (std::runtime_error &ex) {
+		err.assign(ex.what());
+		return false;
+	}
 
-  return true;
+	return true;
 }
 
 //======================================================
@@ -205,7 +205,7 @@ bool Cv_Ta::run() {
 		computeMeanValues();
 	}
 
-  std::cout << "Fn initialized" << std::endl;
+	std::cout << "Fn initialized" << std::endl;
 
 	{
 		DoubleProperty *tmp;
@@ -270,9 +270,9 @@ bool Cv_Ta::run() {
 							min(
 								(num - cv_criteria_cumulated / f0_size) / denum,
 								1
-								),
+							   ),
 							0
-							)
+						   )
 						);
 			}
 			delete itNodesU;
@@ -285,23 +285,23 @@ bool Cv_Ta::run() {
 				if(pluginProgress->state() != TLP_CONTINUE)
 					continueProcess = false;
 
-        if((i + 1) % 10 == 0) {
-          pluginProgress->progress(i, iter_max);
-					std::cerr << "Iteration " << (i+1) << std::endl;
-        }
+				if((i + 1) % 10 == 0) {
+					pluginProgress->progress(i+1, iter_max);
+					std::cerr << "Iteration " << (i+1) << "/" << iter_max << std::endl;
+				}
 
 				if((this->export_interval > 0) && ((i + 1) % this->export_interval) == 0) {
 					std::cerr << "Iteration " << (i+1) << std::endl;
-          try {
-  					exportSelection(i+1);
-          } catch (export_exception &ex) {
-            std::cerr << "Export failed: " << ex.what() << std::endl;
-          }
+					try {
+						exportSelection(i+1);
+					} catch (export_exception &ex) {
+						std::cerr << "Export failed: " << ex.what() << std::endl;
+					}
 				}
 			}
 
-      if(!continueProcess)
-        break;
+			if(!continueProcess)
+				break;
 		}
 	}
 
@@ -312,18 +312,18 @@ bool Cv_Ta::run() {
 
 	fnToSelection();
 
-	graph->delLocalProperty("fn");
+	//graph->delLocalProperty("fn");
 	graph->delLocalProperty("fnp1");
 	graph->delLocalProperty("beta");
 
-  try {
-    exportSelection(iter_max);
-  } catch (export_exception &ex) {
-    std::cerr << "Export failed: " << ex.what() << std::endl;
-  }
-
-
-	std::cout << "FINISHED" << std::endl;
+	if( this->export_interval > 0 )
+	{
+		try {
+			exportSelection(iter_max);
+		} catch (export_exception &ex) {
+			std::cerr << "Export failed: " << ex.what() << std::endl;
+		}
+	}
 
 	return true;
 }
@@ -352,13 +352,13 @@ void Cv_Ta::fnToSelection()
 }
 
 void Cv_Ta::exportSelection(const int i) {
-  std::ostringstream directory_name;
-  directory_name << this->export_directory << "/" << std::setfill('0') << std::setw(6) << i << ".tlp";
+	std::ostringstream directory_name;
+	directory_name << this->export_directory << "/" << std::setfill('0') << std::setw(6) << i << ".tlp";
 
-  if(!tlp::saveGraph(graph, directory_name.str()))
-  {
-    throw export_exception(directory_name.str() + " cannot be written");
-  }
+	if(!tlp::saveGraph(graph, directory_name.str()))
+	{
+		throw export_exception(directory_name.str() + " cannot be written");
+	}
 }
 
 void Cv_Ta::computeMeanValues()
@@ -373,7 +373,7 @@ void Cv_Ta::computeMeanValues()
 	Iterator<node> *itNodes = graph->getNodes();
 	while(itNodes->hasNext()) {
 		n = itNodes->next();
-		
+
 		if(!this->roi->getNodeValue(n))
 			continue;
 
@@ -393,8 +393,15 @@ void Cv_Ta::computeMeanValues()
 	delete itNodes;
 
 	for(i = 0; i < f0_size; ++i) {
-		this->in_out_means.first[i] /= n1 + 1;
-		this->in_out_means.second[i] /= n2 + 1;
+		if(n1 == 0)
+			this->in_out_means.first[i] = 1.0;
+		else
+			this->in_out_means.first[i] /= n1 + 1;
+
+		if(n2 == 0)
+			this->in_out_means.second[i] = 0.0;
+		else
+			this->in_out_means.second[i] /= n2 + 1;
 	}
 }
 
