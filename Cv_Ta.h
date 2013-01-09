@@ -11,7 +11,7 @@ private:
 	double lambda1, lambda2;
 	tlp::DoubleProperty *fn, *fnp1, *beta, *w;
 	tlp::DoubleVectorProperty *f0;
-	tlp::BooleanProperty *mask, *roi;
+	tlp::BooleanProperty *seed, *roi;
 
   unsigned int export_interval;
   std::string export_directory;
@@ -21,14 +21,14 @@ private:
 
 public:
   Cv_Ta(const tlp::AlgorithmContext& context);
-  ~Cv_Ta() {};
+  ~Cv_Ta() {}
   bool run();
   bool check(std::string &);
 
 private:
 	void fnToSelection();
 	void exportSelection(const int i);
-	void computeMeanValues();	
+	void computeMeanValues();
 };
 
 class export_exception : public std::runtime_error {

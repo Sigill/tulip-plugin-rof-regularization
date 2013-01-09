@@ -2,20 +2,21 @@
 #include <sstream>
 #include <iostream>
 #include <iomanip>
+#include <algorithm>
 
 #include <QFileInfo>
 #include <QDir>
 
-ALGORITHMPLUGIN(Cv_Ta, "Cv_Ta", "Cyrille FAUCHEUX","20/11/2011","Alpha","1.1");
+ALGORITHMPLUGIN(Cv_Ta, "Cv_Ta", "Cyrille FAUCHEUX","20/11/2011","Alpha","1.2");
 
 using namespace std;
 using namespace tlp;
 
-inline double max(double v1, double v2) {
+inline double max(const double v1, const double v2) {
 	return (v1 > v2 ? v1 : v2);
 }
 
-inline double min(double v1, double v2) {
+inline double min(const double v1, const double v2) {
 	return (v1 > v2 ? v2 : v1);
 }
 
@@ -31,7 +32,7 @@ namespace {
 	const char * paramHelp[] = {
 		HTML_HELP_OPEN() \
 			HTML_HELP_DEF( "type", "BooleanProperty" ) \
-			HTML_HELP_DEF( "default", "mask" ) \
+			HTML_HELP_DEF( "default", "Seed" ) \
 			HTML_HELP_BODY() \
 			"The boolean property that defines the initial selection." \
 			HTML_HELP_CLOSE(),
@@ -52,21 +53,21 @@ namespace {
 
 		HTML_HELP_OPEN() \
 			HTML_HELP_DEF( "type", "DoubleVectorProperty" ) \
-			HTML_HELP_DEF( "default", "data" ) \
+			HTML_HELP_DEF( "default", "Data" ) \
 			HTML_HELP_BODY() \
 			"Specify which property holds the data associated to each pixels/nodes." \
 			HTML_HELP_CLOSE(),
 
 		HTML_HELP_OPEN() \
 			HTML_HELP_DEF( "type", "DoubleProperty" ) \
-			HTML_HELP_DEF( "default", "weight" ) \
+			HTML_HELP_DEF( "default", "Weight" ) \
 			HTML_HELP_BODY() \
 			"Specify which property holds the weight associated to each edge." \
 			HTML_HELP_CLOSE(),
 
 		HTML_HELP_OPEN() \
 			HTML_HELP_DEF( "type", "BooleanProperty" ) \
-			HTML_HELP_DEF( "default", "roi" ) \
+			HTML_HELP_DEF( "default", "Roi" ) \
 			HTML_HELP_BODY() \
 			"The boolean property that defines the region of interest." \
 			HTML_HELP_CLOSE(),
@@ -80,14 +81,13 @@ namespace {
 
 		HTML_HELP_OPEN() \
 			HTML_HELP_DEF( "type", "Unsigned int" ) \
-			HTML_HELP_DEF( "default", "50" ) \
+			HTML_HELP_DEF( "default", "0" ) \
 			HTML_HELP_BODY() \
 			"Specify at which interval the processed image must be exported. (0 to disable intermediate export)" \
 			HTML_HELP_CLOSE(),
 
 		HTML_HELP_OPEN() \
 			HTML_HELP_DEF( "type", "Directory pathname" ) \
-			HTML_HELP_DEF( "default", "/tmp" ) \
 			HTML_HELP_BODY() \
 			"This parameter is used to specify where the processed images must be exported." \
 			HTML_HELP_CLOSE(),
@@ -95,21 +95,23 @@ namespace {
 }
 
 //======================================================
-Cv_Ta::Cv_Ta(const tlp::AlgorithmContext &context):Algorithm(context), fn(NULL), fnp1(NULL), beta(NULL), w(NULL), f0(NULL), mask(NULL), roi(NULL) {
-	addParameter<DoubleVectorProperty>("Data", paramHelp[3]);
-	addParameter<BooleanProperty>("Mask", paramHelp[0]);
-	addParameter<unsigned int>("Number of iterations", paramHelp[1], "1000");
-	addParameter<double>("Lambda1", paramHelp[2], "0.25");
-	addParameter<double>("Lambda2", paramHelp[6], "0.25");
-	addParameter<DoubleProperty>("Weight", paramHelp[4]);
-	addParameter<BooleanProperty>("Roi", paramHelp[5]);
-	addParameter<unsigned int>("Export interval", paramHelp[7], "50");
-	addParameter<string>("dir::Export directory", paramHelp[8]);
+Cv_Ta::Cv_Ta(const tlp::AlgorithmContext &context):Algorithm(context), fn(NULL), fnp1(NULL), beta(NULL), w(NULL), f0(NULL), seed(NULL), roi(NULL) {
+	addParameter<DoubleVectorProperty>("data", paramHelp[3]);
+	addParameter<BooleanProperty>("seed", paramHelp[0]);
+	addParameter<unsigned int>("number of iterations", paramHelp[1], "1000");
+	addParameter<double>("lambda1", paramHelp[2], "0.25");
+	addParameter<double>("lambda2", paramHelp[6], "0.25");
+	addParameter<DoubleProperty>("weight", paramHelp[4]);
+	addParameter<BooleanProperty>("region of interest", paramHelp[5]);
+	addParameter<unsigned int>("export interval", paramHelp[7], "50");
+	addParameter<string>("dir::export directory", paramHelp[8]);
 }
 
 #define CHECK_PROP_PROVIDED(PROP, STOR) \
-	if(!dataSet->get(#PROP, STOR)) \
-		throw std::runtime_error(std::string("No \"") + #PROP + "\" provided")
+	do { \
+		if(!dataSet->get(PROP, STOR)) \
+			throw std::runtime_error(std::string("No \"") + PROP + "\" provided"); \
+	} while(0)
 
 bool Cv_Ta::check(std::string &err)
 {
@@ -117,28 +119,30 @@ bool Cv_Ta::check(std::string &err)
 		if(dataSet == NULL)
 			throw std::runtime_error("No dataset provided.");
 
-		CHECK_PROP_PROVIDED(Data, this->f0);
+		CHECK_PROP_PROVIDED("data", this->f0);
 
-		CHECK_PROP_PROVIDED(Mask, this->mask);
+		CHECK_PROP_PROVIDED("seed", this->seed);
 
-		CHECK_PROP_PROVIDED(Number of iterations, this->iter_max);
+		CHECK_PROP_PROVIDED("number of iterations", this->iter_max);
 
-		CHECK_PROP_PROVIDED(Lambda1, this->lambda1);
+		CHECK_PROP_PROVIDED("lambda1", this->lambda1);
 
-		CHECK_PROP_PROVIDED(Lambda2, this->lambda2);
+		CHECK_PROP_PROVIDED("lambda2", this->lambda2);
 
-		CHECK_PROP_PROVIDED(Weight, this->w);
+		CHECK_PROP_PROVIDED("weight", this->w);
 
-		CHECK_PROP_PROVIDED(Roi, this->roi);
+		CHECK_PROP_PROVIDED("region of interest", this->roi);
 
-		CHECK_PROP_PROVIDED(Export interval, this->export_interval);
+		CHECK_PROP_PROVIDED("export interval", this->export_interval);
 
-		CHECK_PROP_PROVIDED(dir::Export directory, this->export_directory);
+		// No need for an export directory if export is disabled
+		if(this->export_interval > 0)
+			CHECK_PROP_PROVIDED("dir::export directory", this->export_directory);
 
-		if(this->iter_max <= 0) {
-			std::ostringstream err;
-			err << "Invalid number of iterations: " << this->iter_max;
-			throw std::runtime_error(err.str());
+		if(this->iter_max < 0) {
+			std::ostringstream m;
+			m << "Invalid number of iterations: " << this->iter_max;
+			throw std::runtime_error(m.str());
 		}
 
 		{ // Checking if we can write in the export directory
@@ -161,6 +165,7 @@ bool Cv_Ta::check(std::string &err)
 			}
 		}
 
+		std::cout << "Processing graph " << graph->getName() << std::endl;
 		std::cout << "Number of iterations: " << this->iter_max << std::endl;
 		std::cout << "Lambda1: " << this->lambda1 << std::endl;
 		std::cout << "Lambda2: " << this->lambda2 << std::endl;
@@ -180,7 +185,7 @@ bool Cv_Ta::run() {
 	this->fnp1 = graph->getLocalProperty<DoubleProperty>("fnp1");
 	this->fn->setAllNodeValue(0.0);
 
-	{ // Initializing Fn from the mask
+	{ // Initializing Fn from the seed
 		Iterator<node> *itNodes = graph->getNodes();
 		node n;
 
@@ -190,7 +195,6 @@ bool Cv_Ta::run() {
 		}
 		delete itNodes;
 
-
 		this->in_out_means.first = std::vector< double >(this->f0_size, 0.0);
 		this->in_out_means.second = std::vector< double >(this->f0_size, 0.0);
 
@@ -198,7 +202,7 @@ bool Cv_Ta::run() {
 		while(itNodes->hasNext()) {
 			n = itNodes->next();
 			if(this->roi->getNodeValue(n))
-				this->fn->setNodeValue(n, this->mask->getNodeValue(n) ? 1.0 : 0.0);
+				this->fn->setNodeValue(n, this->seed->getNodeValue(n) ? 1.0 : 0.0);
 		}
 		delete itNodes;
 
@@ -303,18 +307,18 @@ bool Cv_Ta::run() {
 			if(!continueProcess)
 				break;
 		}
+
+		graph->delLocalProperty("beta");
+		//graph->delLocalProperty("fn");
+		graph->delLocalProperty("fnp1");
 	}
 
-	if(pluginProgress) {
+	if(pluginProgress && iter_max > 0) {
 		pluginProgress->progress(iter_max, iter_max);
 		pluginProgress->setComment("Computing selection");
 	}
 
 	fnToSelection();
-
-	//graph->delLocalProperty("fn");
-	graph->delLocalProperty("fnp1");
-	graph->delLocalProperty("beta");
 
 	if( this->export_interval > 0 )
 	{
@@ -335,7 +339,8 @@ void Cv_Ta::fnToSelection()
 	node u;
 	BooleanProperty *selection = graph->getLocalProperty<BooleanProperty>("viewSelection");
 	DoubleProperty *fn = graph->getLocalProperty<DoubleProperty>("fn");
-	double threshold = (fn->getNodeMax(graph)-fn->getNodeMin(graph)) / 2.0;
+	const double min = fn->getNodeMin(graph), max = fn->getNodeMax(graph);
+	const double threshold = (max + min) / 2.0;
 
 	std::cout << "Threshold: " << threshold << std::endl;
 
@@ -363,12 +368,13 @@ void Cv_Ta::exportSelection(const int i) {
 
 void Cv_Ta::computeMeanValues()
 {
-	this->in_out_means.first = std::vector< double >(this->f0_size, 0.0);
-	this->in_out_means.second = std::vector< double >(this->f0_size, 0.0);
 	int n1 = 0, n2 = 0;
 	node n;
 	unsigned int i;
 	std::vector< double > f0_value;
+
+	std::fill(this->in_out_means.first.begin(), this->in_out_means.first.end(), 0.0);
+	std::fill(this->in_out_means.second.begin(), this->in_out_means.second.end(), 0.0);
 
 	Iterator<node> *itNodes = graph->getNodes();
 	while(itNodes->hasNext()) {
@@ -396,12 +402,12 @@ void Cv_Ta::computeMeanValues()
 		if(n1 == 0)
 			this->in_out_means.first[i] = 1.0;
 		else
-			this->in_out_means.first[i] /= n1 + 1;
+			this->in_out_means.first[i] /= n1;
 
 		if(n2 == 0)
 			this->in_out_means.second[i] = 0.0;
 		else
-			this->in_out_means.second[i] /= n2 + 1;
+			this->in_out_means.second[i] /= n2;
 	}
 }
 
