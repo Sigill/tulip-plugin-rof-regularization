@@ -3,6 +3,7 @@
 #include <iostream>
 #include <iomanip>
 #include <algorithm>
+#include <cfloat>
 
 #include <QFileInfo>
 #include <QDir>
@@ -342,14 +343,36 @@ bool Cv_Ta::run() {
 }
 //=======================================================================
 
+std::pair<double, double> Cv_Ta::computeFnMinMax() {
+	double fn_min = -DBL_MAX, fn_max = DBL_MAX;
+
+	Iterator<node> *itN = graph->getNodes();
+
+	while (itN->hasNext()) {
+		node itn=itN->next();
+
+		if(this->roi->getNodeValue(itn))
+		{
+			double tmp = this->fn->getNodeValue(itn);
+
+			if (tmp > fn_max) fn_max = tmp;
+
+			if (tmp < fn_min) fn_min = tmp;
+		}
+	}
+
+	delete itN;
+	return std::pair<double, double>(fn_min, fn_max);
+}
+
 void Cv_Ta::fnToSelection() 
 {
 	Iterator<node> *itNodesU;
 	node u;
 	BooleanProperty *selection = graph->getLocalProperty<BooleanProperty>("viewSelection");
 	DoubleProperty *fn = graph->getLocalProperty<DoubleProperty>("fn");
-	const double min = fn->getNodeMin(graph), max = fn->getNodeMax(graph);
-	const double threshold = (max + min) / 2.0;
+	const std::pair<double, double> fn_min_max = computeFnMinMax();
+	const double threshold = (fn_min_max.first + fn_min_max.second) / 2.0;
 
 	std::cout << "Threshold: " << threshold << std::endl;
 

@@ -26,6 +26,7 @@ public:
 	bool check(std::string &);
 
 private:
+	std::pair<double, double> computeFnMinMax();
 	void fnToSelection();
 	void exportSelection(const int i);
 	void computeMeanValues();
