@@ -95,7 +95,7 @@ namespace {
 }
 
 //======================================================
-Cv_Ta::Cv_Ta(const tlp::AlgorithmContext &context):Algorithm(context), fn(NULL), fnp1(NULL), beta(NULL), w(NULL), f0(NULL), seed(NULL), roi(NULL) {
+Cv_Ta::Cv_Ta(const tlp::AlgorithmContext &context):Algorithm(context), fn(NULL), fnp1(NULL), beta(NULL), w(NULL), f0(NULL), seed(NULL), roi(NULL), f0_size(0) {
 	addParameter<DoubleVectorProperty>("data", paramHelp[3]);
 	addParameter<BooleanProperty>("seed", paramHelp[0]);
 	addParameter<unsigned int>("number of iterations", paramHelp[1], "1000");
@@ -165,8 +165,26 @@ bool Cv_Ta::check(std::string &err)
 			}
 		}
 
+		{ // Finding the size of the data
+			Iterator<node> *itNodes = graph->getNodes();
+			node n;
+
+			if(itNodes->hasNext()) {
+				n = itNodes->next();
+				// Every node may have data attached, but we are only sure for
+				// nodes in the region of interest (otherwise the algorithm cannot run)
+				if(this->roi->getNodeValue(n))
+					this->f0_size = this->f0->getNodeValue(n).size();
+			}
+			delete itNodes;
+
+			if(this->f0_size == 0)
+				throw new std::runtime_error("No value can be found in the \"data\" property");
+		}
+
 		std::cout << "Processing graph " << graph->getName() << std::endl;
 		std::cout << "Number of iterations: " << this->iter_max << std::endl;
+		std::cout << "Length of the data: " << this->f0_size << std::endl;
 		std::cout << "Lambda1: " << this->lambda1 << std::endl;
 		std::cout << "Lambda2: " << this->lambda2 << std::endl;
 		std::cout << "Export interval: " << this->export_interval << std::endl;
@@ -189,24 +207,15 @@ bool Cv_Ta::run() {
 		Iterator<node> *itNodes = graph->getNodes();
 		node n;
 
-		if(itNodes->hasNext()) {
-			n = itNodes->next();
-			this->f0_size = this->f0->getNodeValue(n).size();
-		}
-		delete itNodes;
-
 		this->in_out_means.first = std::vector< double >(this->f0_size, 0.0);
 		this->in_out_means.second = std::vector< double >(this->f0_size, 0.0);
 
-		itNodes = graph->getNodes();
 		while(itNodes->hasNext()) {
 			n = itNodes->next();
 			if(this->roi->getNodeValue(n))
 				this->fn->setNodeValue(n, this->seed->getNodeValue(n) ? 1.0 : 0.0);
 		}
 		delete itNodes;
-
-		computeMeanValues();
 	}
 
 	std::cout << "Fn initialized" << std::endl;
@@ -249,11 +258,11 @@ bool Cv_Ta::run() {
 				num = 0; denum = 0;
 				while(itEdges->hasNext()) {
 					e = itEdges->next();
-					b = beta->getEdgeValue(e);
-
 					v = graph->opposite(e, u);
 
 					if(this->roi->getNodeValue(v)) {
+						b = beta->getEdgeValue(e);
+
 						num += b * fn->getNodeValue(v);
 						denum += b;
 					}
@@ -410,5 +419,3 @@ void Cv_Ta::computeMeanValues()
 			this->in_out_means.second[i] /= n2;
 	}
 }
-
-
