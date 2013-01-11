@@ -170,12 +170,14 @@ bool Cv_Ta::check(std::string &err)
 			Iterator<node> *itNodes = graph->getNodes();
 			node n;
 
-			if(itNodes->hasNext()) {
+			while(itNodes->hasNext()) {
 				n = itNodes->next();
 				// Every node may have data attached, but we are only sure for
 				// nodes in the region of interest (otherwise the algorithm cannot run)
-				if(this->roi->getNodeValue(n))
+				if(this->roi->getNodeValue(n)) {
 					this->f0_size = this->f0->getNodeValue(n).size();
+					break;
+				}
 			}
 			delete itNodes;
 
