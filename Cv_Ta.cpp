@@ -8,7 +8,7 @@
 #include <QFileInfo>
 #include <QDir>
 
-ALGORITHMPLUGIN(Cv_Ta, "Cv_Ta", "Cyrille FAUCHEUX","20/11/2011","Alpha","1.2");
+ALGORITHMPLUGIN(Cv_Ta, "Cv_Ta", "Cyrille FAUCHEUX","20/11/2011","Alpha","1.3");
 
 using namespace std;
 using namespace tlp;
@@ -32,7 +32,7 @@ std::string to_string(T t, std::ios_base & (*f)(std::ios_base&))
 namespace {
 	const char * paramHelp[] = {
 		HTML_HELP_OPEN() \
-			HTML_HELP_DEF( "type", "BooleanProperty" ) \
+			HTML_HELP_DEF( "type", "DoubleProperty" ) \
 			HTML_HELP_DEF( "default", "Seed" ) \
 			HTML_HELP_BODY() \
 			"The boolean property that defines the initial selection." \
@@ -96,16 +96,16 @@ namespace {
 }
 
 //======================================================
-Cv_Ta::Cv_Ta(const tlp::AlgorithmContext &context):Algorithm(context), fn(NULL), fnp1(NULL), beta(NULL), w(NULL), f0(NULL), seed(NULL), roi(NULL), f0_size(0) {
-	addParameter<DoubleVectorProperty>("data", paramHelp[3]);
-	addParameter<BooleanProperty>("seed", paramHelp[0]);
-	addParameter<unsigned int>("number of iterations", paramHelp[1], "1000");
-	addParameter<double>("lambda1", paramHelp[2], "0.25");
-	addParameter<double>("lambda2", paramHelp[6], "0.25");
-	addParameter<DoubleProperty>("weight", paramHelp[4]);
-	addParameter<BooleanProperty>("region of interest", paramHelp[5]);
-	addParameter<unsigned int>("export interval", paramHelp[7], "50");
-	addParameter<string>("dir::export directory", paramHelp[8]);
+Cv_Ta::Cv_Ta(const tlp::AlgorithmContext &context):Algorithm(context), f0(NULL), roi(NULL), fn(NULL), fnp1(NULL), beta(NULL), w(NULL), seed(NULL), f0_size(0) {
+	addParameter< DoubleVectorProperty >("data",                  paramHelp[3]);
+	addParameter< DoubleProperty >      ("seed",                  paramHelp[0]);
+	addParameter< unsigned int >        ("number of iterations",  paramHelp[1], "1000");
+	addParameter< double >              ("lambda1",               paramHelp[2], "0.25");
+	addParameter< double >              ("lambda2",               paramHelp[6], "0.25");
+	addParameter< DoubleProperty >      ("weight",                paramHelp[4]);
+	addParameter< BooleanProperty >     ("region of interest",    paramHelp[5]);
+	addParameter< unsigned int >        ("export interval",       paramHelp[7], "50");
+	addParameter< string >              ("dir::export directory", paramHelp[8]);
 }
 
 #define CHECK_PROP_PROVIDED(PROP, STOR) \
@@ -202,26 +202,33 @@ bool Cv_Ta::check(std::string &err)
 
 //======================================================
 bool Cv_Ta::run() {
+	if(graph->existLocalProperty("fn"))
+		graph->delLocalProperty("fn");
+	if(graph->existLocalProperty("fnp1"))
+		graph->delLocalProperty("fnp1");
+
 	this->fn = graph->getLocalProperty<DoubleProperty>("fn");
 	this->fnp1 = graph->getLocalProperty<DoubleProperty>("fnp1");
 	this->fn->setAllNodeValue(0.0);
+	this->fnp1->setAllNodeValue(0.0);
 
-	{ // Initializing Fn from the seed
-		Iterator<node> *itNodes = graph->getNodes();
-		node n;
+	{
+	Iterator<node> *itNodes = graph->getNodes();
+	node n;
 
-		this->in_out_means.first = std::vector< double >(this->f0_size, 0.0);
-		this->in_out_means.second = std::vector< double >(this->f0_size, 0.0);
-
-		while(itNodes->hasNext()) {
-			n = itNodes->next();
-			if(this->roi->getNodeValue(n))
-				this->fn->setNodeValue(n, this->seed->getNodeValue(n) ? 1.0 : 0.0);
+	while(itNodes->hasNext()) {
+		n = itNodes->next();
+		// Every node may have data attached, but we are only sure for
+		// nodes in the region of interest (otherwise the algorithm cannot run)
+		if(this->roi->getNodeValue(n)) {
+			this->fn->setNodeValue(n, this->seed->getNodeValue(n));
 		}
-		delete itNodes;
+	}
+	delete itNodes;
 	}
 
-	std::cout << "Fn initialized" << std::endl;
+	this->in_out_means.first = std::vector< double >(this->f0_size, 0.0);
+	this->in_out_means.second = std::vector< double >(this->f0_size, 0.0);
 
 	{
 		DoubleProperty *tmp;
@@ -346,7 +353,7 @@ bool Cv_Ta::run() {
 //=======================================================================
 
 std::pair<double, double> Cv_Ta::computeFnMinMax() {
-	double fn_min = -DBL_MAX, fn_max = DBL_MAX;
+	double fn_min = DBL_MAX, fn_max = -DBL_MAX;
 
 	Iterator<node> *itN = graph->getNodes();
 
@@ -372,7 +379,6 @@ void Cv_Ta::fnToSelection()
 	Iterator<node> *itNodesU;
 	node u;
 	BooleanProperty *selection = graph->getLocalProperty<BooleanProperty>("viewSelection");
-	DoubleProperty *fn = graph->getLocalProperty<DoubleProperty>("fn");
 	const std::pair<double, double> fn_min_max = computeFnMinMax();
 	const double threshold = (fn_min_max.first + fn_min_max.second) / 2.0;
 
@@ -381,7 +387,7 @@ void Cv_Ta::fnToSelection()
 	itNodesU = graph->getNodes();
 	while(itNodesU->hasNext()) {
 		u = itNodesU->next();
-		if(fn->getNodeValue(u) > threshold) {
+		if(roi->getNodeValue(u) && (fn->getNodeValue(u) > threshold)) {
 			selection->setNodeValue(u, 1);
 		} else {
 			selection->setNodeValue(u, 0);

@@ -9,9 +9,9 @@ class Cv_Ta:public tlp::Algorithm {
 private:
 	unsigned int iter_max;
 	double lambda1, lambda2;
-	tlp::DoubleProperty *fn, *fnp1, *beta, *w;
 	tlp::DoubleVectorProperty *f0;
-	tlp::BooleanProperty *seed, *roi;
+	tlp::BooleanProperty *roi;
+	tlp::DoubleProperty *fn, *fnp1, *beta, *w, *seed;
 
 	unsigned int export_interval;
 	std::string export_directory;
