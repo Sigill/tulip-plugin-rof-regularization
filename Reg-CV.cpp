@@ -171,25 +171,6 @@ bool Reg_CV::check(std::string &err)
 		// No need for an export directory if export is disabled
 		if(this->export_interval > 0) {
 			CHECK_PROP_PROVIDED("dir::export directory", this->export_directory);
-
-			// Checking if we can write in the export directory
-			QString qstring_export_directory = QString::fromStdString(this->export_directory);
-			QFileInfo info_export_directory(qstring_export_directory);
-			QDir qdir_export_directory(qstring_export_directory);
-
-			if(info_export_directory.exists()) {
-				if(info_export_directory.isDir()) {
-					if(qdir_export_directory.entryInfoList(QDir::NoDotAndDotDot | QDir::AllEntries).count() != 0) {
-						throw std::runtime_error("Export directory (" + qdir_export_directory.absolutePath().toStdString() + ") is not empty.");
-					}
-				} else {
-					throw std::runtime_error("Export directory (" + qdir_export_directory.absolutePath().toStdString() + ") already exists but is not a directory.");
-				}
-			} else {
-				if(!qdir_export_directory.mkpath(".")) {
-					throw std::runtime_error("Export directory (" + qdir_export_directory.absolutePath().toStdString() + ") cannot be created.");
-				}
-			}
 		}
 
 		/*
@@ -209,7 +190,7 @@ bool Reg_CV::check(std::string &err)
 		this->fnp1 = graph->getLocalProperty< DoubleProperty >(this->fnp1_name);
 		this->beta = graph->getLocalProperty< DoubleProperty >(this->beta_name);
 
-		std::cout << "Processing graph " << graph->getName() << std::endl
+		std::cerr << "Processing graph " << graph->getName() << std::endl
 		          << "Number of iterations: " << this->iter_max << std::endl
 		          << "Length of the data: " << this->f0_size << std::endl
 		          << "Lambda1: " << this->lambda1 << std::endl
@@ -317,6 +298,8 @@ bool Reg_CV::run() {
 				if((this->export_interval > 0) && ((i + 1) % this->export_interval) == 0) {
 					std::cerr << "Iteration " << (i+1) << std::endl;
 					try {
+						this->result->copy(this->fn);
+						fnToSelection();
 						exportIntermediateResult(i+1);
 					} catch (export_exception &ex) {
 						std::cerr << "Export failed: " << ex.what() << std::endl;
