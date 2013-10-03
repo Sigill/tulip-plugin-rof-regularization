@@ -1,10 +1,8 @@
-# Tulip Grid3D import plugin
+# Tulip ROF regularization plugin
 
 ## Description
 
 Details concerning this algorithm can be found in the Phd thesis of [Vinh Thong Ta](http://tel.archives-ouvertes.fr/tel-00472041/) (in french).
-
-This plugin is also capable to process vectorial data, for example, texture features. This part is related to the work of [Cyrille Faucheux](http://about.me/cyrille.faucheux). More details can be found in [this paper](http://dx.doi.org/10.1109/ICIP.2012.6467364).
 
 ## Build
 

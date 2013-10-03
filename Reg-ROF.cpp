@@ -1,4 +1,4 @@
-#include "Reg-CV.h"
+#include "Reg-ROF.h"
 #include <cmath>
 #include <sstream>
 #include <iostream>
@@ -53,9 +53,9 @@ namespace {
 
 		// 2 Data
 		HTML_HELP_OPEN() \
-			HTML_HELP_DEF( "type", "PropertyInterface" ) \
+			HTML_HELP_DEF( "type", "DoubleProperty" ) \
 			HTML_HELP_BODY() \
-			"Specify which property holds the data associated to each nodes. Can be a Double[Vector]Property." \
+			"Specify which property holds the data associated to each nodes." \
 			HTML_HELP_CLOSE(),
 
 		// 3 Similarity measure
@@ -72,35 +72,28 @@ namespace {
 			"Defines the number of iterations the algorithm will perform." \
 			HTML_HELP_CLOSE(),
 
-		// 5 Lambda 1
+		// 5 Lambda
 		HTML_HELP_OPEN() \
 			HTML_HELP_DEF( "type", "Double" ) \
 			HTML_HELP_BODY() \
-			"Lambda 1 parameter." \
+			"Lambda parameter." \
 			HTML_HELP_CLOSE(),
 
-		// 6 Lambda 2
-		HTML_HELP_OPEN() \
-			HTML_HELP_DEF( "type", "Double" ) \
-			HTML_HELP_BODY() \
-			"Lambda 2 parameter." \
-			HTML_HELP_CLOSE(),
-
-		// 7 Export interval
+		// 6 Export interval
 		HTML_HELP_OPEN() \
 			HTML_HELP_DEF( "type", "Unsigned int" ) \
 			HTML_HELP_BODY() \
 			"Specify at which interval the processed graph must be exported (0 to disable)." \
 			HTML_HELP_CLOSE(),
 
-		// 8 Export directory
+		// 7 Export directory
 		HTML_HELP_OPEN() \
 			HTML_HELP_DEF( "type", "Directory pathname" ) \
 			HTML_HELP_BODY() \
 			"This parameter is used to specify where the processed graph must be exported." \
 			HTML_HELP_CLOSE(),
 
-		// 9 Segmentation result
+		// 8 Segmentation result
 		HTML_HELP_OPEN() \
 			HTML_HELP_DEF( "type", "BooleanProperty" ) \
 			HTML_HELP_BODY() \
@@ -110,25 +103,24 @@ namespace {
 }
 
 //======================================================
-Reg_CV::Reg_CV(const tlp::PluginContext *context):
+Reg_ROF::Reg_ROF(const tlp::PluginContext *context):
 	Algorithm(context),
-	seed(NULL), result(NULL), f0(NULL), w(NULL), iter_max(0), lambda1(0.0), lambda2(0.0), export_interval(0), export_directory(),
-	fn(NULL), fnp1(NULL), beta(NULL), f0_size(0), f0_scalar(NULL), f0_vector(NULL), segmentation_result(NULL),
+	seed(NULL), result(NULL), w(NULL), iter_max(0), lambda(0.0), export_interval(0), export_directory(),
+	fn(NULL), fnp1(NULL), beta(NULL), f0(NULL), segmentation_result(NULL),
 	fn_name(), fnp1_name(), beta_name()
 {
 	addInParameter< DoubleProperty >      ("seed",                  paramHelp[0], "viewMetric");
 	addInParameter< DoubleProperty >      ("result",                paramHelp[1], "viewMetric");
-	addInParameter< BooleanProperty >     ("segmentation result",   paramHelp[9], "viewSelection");
-	addInParameter< PropertyInterface* >  ("data",                  paramHelp[2], "");
-	addInParameter< DoubleProperty >      ("similarity measure",    paramHelp[3], "");
+	addInParameter< BooleanProperty >     ("segmentation result",   paramHelp[8], "viewSelection");
+	addInParameter< DoubleProperty >      ("data",                  paramHelp[2], "viewMetric");
+	addInParameter< DoubleProperty >      ("similarity measure",    paramHelp[3], "viewMetric");
 	addInParameter< unsigned int >        ("number of iterations",  paramHelp[4], "100");
-	addInParameter< double >              ("lambda1",               paramHelp[5], "1");
-	addInParameter< double >              ("lambda2",               paramHelp[6], "1");
-	addInParameter< unsigned int >        ("export interval",       paramHelp[7], "0");
-	addInParameter< string >              ("dir::export directory", paramHelp[8], "");
+	addInParameter< double >              ("lambda",                paramHelp[5], "1");
+	addInParameter< unsigned int >        ("export interval",       paramHelp[6], "0");
+	addInParameter< string >              ("dir::export directory", paramHelp[7], "");
 }
 
-bool Reg_CV::check(std::string &err)
+bool Reg_ROF::check(std::string &err)
 {
 	try {
 		if(dataSet == NULL)
@@ -146,9 +138,7 @@ bool Reg_CV::check(std::string &err)
 
 		CHECK_PROP_PROVIDED("number of iterations", this->iter_max);
 
-		CHECK_PROP_PROVIDED("lambda1", this->lambda1);
-
-		CHECK_PROP_PROVIDED("lambda2", this->lambda2);
+		CHECK_PROP_PROVIDED("lambda", this->lambda);
 
 		CHECK_PROP_PROVIDED("export interval", this->export_interval);
 
@@ -156,16 +146,6 @@ bool Reg_CV::check(std::string &err)
 			std::ostringstream m;
 			m << "Invalid number of iterations: " << this->iter_max;
 			throw std::runtime_error(m.str());
-		}
-
-		if (dynamic_cast< DoubleProperty* >(this->f0)) {
-			this->f0_size = 1;
-			this->f0_scalar = dynamic_cast< DoubleProperty* >(this->f0);
-		} else if (dynamic_cast< DoubleVectorProperty* >(this->f0)) {
-			this->f0_vector = dynamic_cast< DoubleVectorProperty* >(this->f0);
-			this->f0_size = this->f0_vector->getNodeValue(graph->getOneNode()).size();
-		} else {
-			throw std::runtime_error("\"data\" must be a Double[Vector]Property.");
 		}
 
 		// No need for an export directory if export is disabled
@@ -192,9 +172,7 @@ bool Reg_CV::check(std::string &err)
 
 		std::cerr << "Processing graph " << graph->getName() << std::endl
 		          << "Number of iterations: " << this->iter_max << std::endl
-		          << "Length of the data: " << this->f0_size << std::endl
-		          << "Lambda1: " << this->lambda1 << std::endl
-		          << "Lambda2: " << this->lambda2 << std::endl
+		          << "Lambda: " << this->lambda << std::endl
 		          << "Export interval: " << this->export_interval << std::endl
 		          << "Export directory: " << this->export_directory << std::endl;
 	} catch (std::runtime_error &ex) {
@@ -206,14 +184,11 @@ bool Reg_CV::check(std::string &err)
 }
 
 //======================================================
-bool Reg_CV::run() {
+bool Reg_ROF::run() {
 	this->fn->setAllNodeValue(0.0);
 	this->fnp1->setAllNodeValue(0.0);
 
 	this->fn->copy(this->seed);
-
-	this->in_out_means.first = std::vector< double >(this->f0_size, 0.0);
-	this->in_out_means.second = std::vector< double >(this->f0_size, 0.0);
 
 	{
 		DoubleProperty *tmp;
@@ -221,8 +196,7 @@ bool Reg_CV::run() {
 		Iterator<edge> *itEdges;
 		node u, v;
 		edge e;
-		double num, denum, b, cv_criteria, cv_criteria_cumulated;
-		std::vector< double > u0(this->f0_size);
+		double num, denum, b, u0;
 		bool continueProcess = true;
 
 		if(pluginProgress)
@@ -237,8 +211,6 @@ bool Reg_CV::run() {
 				this->beta->setEdgeValue(e, this->w->getEdgeValue(e) / (fabs(fn->getNodeValue(u) - fn->getNodeValue(v)) + 1));
 			}
 			delete itEdges;
-
-			computeMeanValues();
 
 			itNodesU = graph->getNodes();
 			while(itNodesU->hasNext()) {
@@ -257,27 +229,10 @@ bool Reg_CV::run() {
 				}
 				delete itEdges;
 
-				if(this->f0_scalar) {
-					u0[0] = this->f0_scalar->getNodeValue(u);
-				} else {
-					u0 = this->f0_vector->getNodeValue(u);
-				}
-				cv_criteria_cumulated = 0;
-				for(unsigned int j = 0; j < f0_size; ++j) {
-					cv_criteria = in_out_means.first[j] - u0[j];
-					cv_criteria_cumulated += lambda1 * cv_criteria * cv_criteria;
-					cv_criteria = in_out_means.second[j] - u0[j];
-					cv_criteria_cumulated -= lambda2 * cv_criteria * cv_criteria;
-				}
+				u0 = 1 - 2 * this->f0->getNodeValue(u);
 
 				this->fnp1->setNodeValue(u,
-						std::max(
-							std::min(
-								(num - cv_criteria_cumulated / f0_size) / denum,
-								1.0
-							   ),
-							0.0
-						   )
+						std::max( std::min( (num - lambda * u0) / denum, 1.0 ), 0.0 )
 						);
 			}
 			delete itNodesU;
@@ -338,7 +293,7 @@ bool Reg_CV::run() {
 }
 //=======================================================================
 
-std::pair<double, double> Reg_CV::computeFnMinMax() {
+std::pair<double, double> Reg_ROF::computeFnMinMax() {
 	double fn_min = DBL_MAX, fn_max = -DBL_MAX;
 
 	Iterator<node> *itN = graph->getNodes();
@@ -357,7 +312,7 @@ std::pair<double, double> Reg_CV::computeFnMinMax() {
 	return std::pair<double, double>(fn_min, fn_max);
 }
 
-void Reg_CV::fnToSelection() 
+void Reg_ROF::fnToSelection() 
 {
 	Iterator<node> *itNodesU;
 	node u;
@@ -378,58 +333,12 @@ void Reg_CV::fnToSelection()
 	delete itNodesU;
 }
 
-void Reg_CV::exportIntermediateResult(const int i) {
+void Reg_ROF::exportIntermediateResult(const int i) {
 	std::ostringstream directory_name;
 	directory_name << this->export_directory << "/" << std::setfill('0') << std::setw(6) << i << ".tlp";
 
 	if(!tlp::saveGraph(graph, directory_name.str()))
 	{
 		throw export_exception(directory_name.str() + " cannot be written");
-	}
-}
-
-void Reg_CV::computeMeanValues()
-{
-	int n1 = 0, n2 = 0;
-	node n;
-	unsigned int i;
-	std::vector< double > f0_value(1);
-
-	std::fill(this->in_out_means.first.begin(), this->in_out_means.first.end(), 0.0);
-	std::fill(this->in_out_means.second.begin(), this->in_out_means.second.end(), 0.0);
-
-	Iterator<node> *itNodes = graph->getNodes();
-	while(itNodes->hasNext()) {
-		n = itNodes->next();
-
-		if(this->f0_scalar) {
-			f0_value[0] = this->f0_scalar->getNodeValue(n);
-		} else {
-			f0_value = this->f0_vector->getNodeValue(n);
-		}
-		if(this->fn->getNodeValue(n) >= 0.5) {
-			for(i = 0; i < f0_size; ++i) {
-				this->in_out_means.first[i] += f0_value[i];
-			}
-			++n1;
-		} else {
-			for(i = 0; i < f0_size; ++i) {
-				this->in_out_means.second[i] += f0_value[i];
-			}
-			++n2;
-		}
-	}
-	delete itNodes;
-
-	for(i = 0; i < f0_size; ++i) {
-		if(n1 == 0)
-			this->in_out_means.first[i] = 1.0;
-		else
-			this->in_out_means.first[i] /= n1;
-
-		if(n2 == 0)
-			this->in_out_means.second[i] = 0.0;
-		else
-			this->in_out_means.second[i] /= n2;
 	}
 }
